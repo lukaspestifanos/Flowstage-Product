@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -68,17 +68,6 @@ interface EditPlan {
   narrative_summary: string;
   clips: PlanClip[];
   preset_name?: string;
-}
-
-interface SongSearchResult {
-  id: number;
-  artist: string;
-  title: string;
-  album: string;
-  duration: number;
-  hasTimestamps: boolean;
-  lines: { text: string; start_time: number; end_time: number }[];
-  rawLyrics: string;
 }
 
 // ── Helpers ────────────────────────────────────────────
@@ -201,13 +190,6 @@ export default function EditorMode() {
   const [renderUrl, setRenderUrl] = useState<string | null>(null);
   const [renderError, setRenderError] = useState<string | null>(null);
 
-  // Song search
-  const [songQuery, setSongQuery] = useState("");
-  const [songResults, setSongResults] = useState<SongSearchResult[]>([]);
-  const [searchingSongs, setSearchingSongs] = useState(false);
-  const [selectedSong, setSelectedSong] = useState<SongSearchResult | null>(null);
-  const songSearchTimeout = useRef<ReturnType<typeof setTimeout>>(undefined);
-
   // Clip upload
   const [clipUrl, setClipUrl] = useState("");
   const [uploadingClip, setUploadingClip] = useState(false);
@@ -288,28 +270,6 @@ export default function EditorMode() {
     return () => clearInterval(id);
   }, [rendering]);
 
-  // Debounced song search
-  useEffect(() => {
-    if (!songQuery.trim() || songQuery.length < 2) {
-      setSongResults([]);
-      return;
-    }
-    clearTimeout(songSearchTimeout.current);
-    songSearchTimeout.current = setTimeout(async () => {
-      setSearchingSongs(true);
-      try {
-        const res = await fetch(`/api/search-songs?q=${encodeURIComponent(songQuery)}`);
-        const data = await res.json();
-        setSongResults(data.results || []);
-      } catch {
-        setSongResults([]);
-      } finally {
-        setSearchingSongs(false);
-      }
-    }, 300);
-    return () => clearTimeout(songSearchTimeout.current);
-  }, [songQuery]);
-
   const handleUploadClip = useCallback(async () => {
     if (!clipUrl.trim() || !selectedAestheticId) return;
     setUploadingClip(true);
@@ -337,23 +297,7 @@ export default function EditorMode() {
   const selectedAudio = audios.find((a) => a.id === selectedAudioId);
   const selectedAesthetic = aesthetics.find((a) => a.id === selectedAestheticId);
 
-  // Build the audio object for plan-edit — use Flowstage audio if selected, augment with searched song lyrics
-  const audioForPlan = selectedAudio
-    ? {
-        ...selectedAudio,
-        // If we have a searched song with lyrics, merge those in as sections
-        sections: selectedSong?.lines?.length
-          ? [{ name: "Full track", start_time: 0, end_time: selectedAudio.duration || selectedSong.duration, lines: selectedSong.lines }]
-          : selectedAudio.sections,
-      }
-    : selectedSong
-    ? {
-        id: `search-${selectedSong.id}`,
-        name: `${selectedSong.artist} - ${selectedSong.title}`,
-        duration: selectedSong.duration,
-        sections: [{ name: "Full track", start_time: 0, end_time: selectedSong.duration, lines: selectedSong.lines }],
-      }
-    : null;
+  const audioForPlan = selectedAudio || null;
 
   const resetPlan = useCallback(() => {
     setPlan(null);
@@ -518,7 +462,7 @@ export default function EditorMode() {
             <div className="space-y-1">
               <h1 className="text-2xl font-semibold tracking-tight">Campaign Analytics</h1>
               <p className="text-sm text-muted-foreground">
-                Performance across all managed accounts and editor pages — last 30 days.
+                Performance across TikTok, Instagram, and YouTube - all accounts, last 30 days.
               </p>
             </div>
 
@@ -817,87 +761,20 @@ export default function EditorMode() {
             <div className="space-y-6">
               <div className="space-y-1">
                 <h1 className="text-2xl font-semibold tracking-tight">
-                  Let Flowstage cut your edit.
+                  AI-directed edits for TikTok, Instagram, and YouTube.
                 </h1>
                 <p className="text-sm text-muted-foreground">
-                  Pick a track from your catalog, choose an editor page aesthetic, and generate
-                  emotionally-matched edits for your managed accounts. AI reads every clip and
-                  tells you why it chose each one.
+                  Flowstage renders. Triptych decides what to render and why. Pick a song, select your
+                  clips, and AI matches each clip to the lyrics based on emotional meaning - not beats.
+                  Review the reasoning, then render to any platform in one click.
                 </p>
               </div>
 
-              {/* Song search */}
-              <div className="space-y-2">
-                <label className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-                  Song — search catalog or trending sounds
-                </label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    placeholder="Search your catalog, a trending sound, or any artist..."
-                    value={songQuery}
-                    onChange={(e) => setSongQuery(e.target.value)}
-                    className="w-full h-10 rounded-lg border border-border bg-card pl-3 pr-10 text-sm focus:outline-none focus:ring-1 focus:ring-white/20"
-                  />
-                  {searchingSongs && (
-                    <div className="absolute right-3 top-3">
-                      <span className="animate-spin inline-block w-4 h-4 border-2 border-muted-foreground/30 border-t-muted-foreground rounded-full" />
-                    </div>
-                  )}
-                  {songResults.length > 0 && (
-                    <div className="absolute top-full left-0 right-0 mt-1 rounded-lg border border-border bg-card shadow-xl z-50 max-h-60 overflow-y-auto">
-                      {songResults.map((song) => (
-                        <button
-                          key={song.id}
-                          onClick={() => {
-                            setSelectedSong(song);
-                            setSongQuery("");
-                            setSongResults([]);
-                            resetPlan();
-                          }}
-                          className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-white/[0.03] border-b border-border/30 last:border-0"
-                        >
-                          <div className="w-8 h-8 rounded bg-white/10 flex items-center justify-center text-xs font-medium shrink-0">
-                            {song.artist.charAt(0).toUpperCase()}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium truncate">{song.title}</p>
-                            <p className="text-[11px] text-muted-foreground truncate">
-                              {song.artist} · {formatTime(song.duration)}
-                              {song.hasTimestamps && " · synced lyrics"}
-                            </p>
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                {selectedSong && (
-                  <div className="flex items-center gap-3 p-3 rounded-lg border border-border bg-card">
-                    <div className="w-10 h-10 rounded bg-white/10 flex items-center justify-center text-sm font-medium shrink-0">
-                      {selectedSong.artist.charAt(0).toUpperCase()}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium">{selectedSong.title}</p>
-                      <p className="text-[11px] text-muted-foreground">
-                        {selectedSong.artist} · {formatTime(selectedSong.duration)} · {selectedSong.lines.length} lyric lines
-                      </p>
-                    </div>
-                    <button
-                      onClick={() => { setSelectedSong(null); resetPlan(); }}
-                      className="text-xs text-muted-foreground hover:text-foreground"
-                    >
-                      Clear
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              {/* Flowstage audio + aesthetic row */}
+              {/* Audio + aesthetic + preset row */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-                    Catalog Audio
+                    Audio Track
                   </label>
                   <select
                     value={selectedAudioId}
@@ -905,7 +782,6 @@ export default function EditorMode() {
                     disabled={loadingData}
                     className="w-full h-10 rounded-lg border border-border bg-card px-3 text-sm focus:outline-none focus:ring-1 focus:ring-white/20 disabled:opacity-50"
                   >
-                    <option value="">None (lyrics only)</option>
                     {audios.map((a) => (
                       <option key={a.id} value={a.id}>
                         {a.name}{a.duration ? ` · ${formatTime(a.duration)}` : ""}
@@ -1109,7 +985,7 @@ export default function EditorMode() {
                 </Button>
                 {planning && (
                   <span className="text-xs text-muted-foreground">
-                    Scoring {activeClips.length} clips against the track…
+                    Matching {activeClips.length} clips to lyrics…
                   </span>
                 )}
               </div>
@@ -1264,12 +1140,12 @@ export default function EditorMode() {
                       </Button>
                       {!selectedAudio && (
                         <p className="text-[11px] text-amber-400 leading-relaxed">
-                          Select a catalog audio track above to render. Song search provides lyrics for planning — rendering requires an uploaded track.
+                          Select an audio track above to render. Song search provides lyrics for AI planning - Flowstage needs the uploaded audio to produce the video.
                         </p>
                       )}
                       {selectedAudio && (
                         <p className="text-[11px] text-muted-foreground leading-relaxed">
-                          Rendering {plan.clips.length} clips with &ldquo;{selectedAudio.name}&rdquo; — ready to distribute to managed accounts.
+                          Rendering {plan.clips.length} clips with &ldquo;{selectedAudio.name}&rdquo; via Flowstage. Ready for TikTok, Instagram, or YouTube.
                         </p>
                       )}
                       {renderError && (
