@@ -155,6 +155,9 @@ function transformToFrontendPlan(
 ): EditPlan {
   const clipMap = new Map(clips.map((c) => [c.id, c]));
 
+  // Filter out any hallucinated video_ids that don't exist in our clip set
+  const validClipOrder = raw.clip_order.filter((entry) => clipMap.has(entry.video_id));
+
   return {
     section: {
       name: raw.chosen_section.name,
@@ -164,7 +167,7 @@ function transformToFrontendPlan(
     hook: raw.hook.text,
     narrative_summary: raw.narrative_summary,
     preset_name: presetName,
-    clips: raw.clip_order.map((entry) => {
+    clips: validClipOrder.map((entry) => {
       const source = clipMap.get(entry.video_id);
       return {
         video_id: entry.video_id,

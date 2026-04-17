@@ -181,6 +181,7 @@ export default function EditorMode() {
   const [audios, setAudios] = useState<Audio[]>([]);
   const [aesthetics, setAesthetics] = useState<Aesthetic[]>([]);
   const [loadingData, setLoadingData] = useState(true);
+  const [usageLimits, setUsageLimits] = useState<{ usage: Record<string, number>; limits: Record<string, number> } | null>(null);
 
   const [selectedAudioId, setSelectedAudioId] = useState("");
   const [selectedAestheticId, setSelectedAestheticId] = useState("");
@@ -218,9 +219,10 @@ export default function EditorMode() {
       .then((r) => r.json())
       .then((data) => {
         if (data.error) return;
-        setApiKeyStored(true); // env key works
+        setApiKeyStored(true);
         setAudios(data.audios || []);
         setAesthetics(data.aesthetics || []);
+        if (data.limits) setUsageLimits(data.limits);
         if (data.audios?.length) setSelectedAudioId(data.audios[0].id);
         if (data.aesthetics?.length) setSelectedAestheticId(data.aesthetics[0].id);
       })
@@ -428,7 +430,7 @@ export default function EditorMode() {
     } finally {
       setRendering(false);
     }
-  }, [plan, selectedAudio, selectedAesthetic]);
+  }, [plan, selectedAudio, selectedAesthetic, selectedPreset]);
 
   const canPlan =
     !!audioForPlan && !!selectedAestheticId && activeClips.length > 0 && !planning && !loadingClips;
@@ -783,10 +785,10 @@ export default function EditorMode() {
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                   {[
-                    { label: "Video Edits", used: 1, limit: 50 },
-                    { label: "Posts", used: 0, limit: 100 },
-                    { label: "Audio Uploads", used: 0, limit: 5 },
-                    { label: "Slideshows", used: 0, limit: 50 },
+                    { label: "Video Edits", used: usageLimits?.usage?.video_edits_per_month ?? 0, limit: usageLimits?.limits?.video_edits_per_month ?? 50 },
+                    { label: "Posts", used: usageLimits?.usage?.posts_per_month ?? 0, limit: usageLimits?.limits?.posts_per_month ?? 100 },
+                    { label: "Audio Uploads", used: usageLimits?.usage?.audios_uploaded_per_month ?? 0, limit: usageLimits?.limits?.audios_uploaded_per_month ?? 5 },
+                    { label: "Slideshows", used: usageLimits?.usage?.slideshow_edits_per_month ?? 0, limit: usageLimits?.limits?.slideshow_edits_per_month ?? 50 },
                   ].map((item) => (
                     <div key={item.label} className="space-y-1.5">
                       <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">{item.label}</p>
